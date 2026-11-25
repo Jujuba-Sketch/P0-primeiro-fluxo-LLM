@@ -1,32 +1,49 @@
 import os
 import requests
-import urllib3
 from dotenv import load_dotenv
+import sys
 
 load_dotenv()
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
-OLLAMA_HOST = os.getenv("OLLAMA_HOST" , "https://llm-internal.softex:9001")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL" , "qwen3.5")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL" , "gemini-4-hydrogen")
+if not GEMINI_API_KEY:
+    print("Erro: GEMINI_API_KEY não encontrada. Configure no arquivo .env antes de rodar.")
+    sys.exit(1)
 
 def resumir_texto (texto):
-    url = f"{OLLAMA_HOST}/api/generate"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    params = {"key": GEMINI_API_KEY}
     instrucao = (
     "Atue como um assistente de resumo e organize esse texto, de forma que seja "
     "resumido com as principais ideias, em tópicos objetivos, com pontos chave, "
     "para entender o conteúdo. Não invente informações e não seja redundante, seja objetivo.\n\n"
-    f"{texto}"
-)
+    f"{texto}: \n{texto}"
+    )
+
     payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": instrucao,
-        "stream": False,
+        "contents": [
+            {
+                "parts": [
+                    {"text": instrucao}
+                ]
+            }
+        ]
     }
+
     try:
-        resposta = requests.post(url, json=payload, verify=False)
+        resposta = requests.post(url, params = params , json = payload, timeout = 30)
         resposta.raise_for_status()
         dados = resposta.json()
+        candidates = dados.get("candidates") or []
+        if not candidates:
+            print("Nenhuma resposta recebida do modelo.")
+            return None
+        content = candidates[0].get("content") or {}
+        parts = content.get("parts") or []
+        if not parts:
+            print("A resposta da API não retornou conteúdo de texto.")
+            return None
+        return parts[0].get("text", "").strip()
         return dados.get("response", "")
     except requests.exceptions.RequestException as erro :
         print(f"Erro ao conectar ao servidor: {erro}")
